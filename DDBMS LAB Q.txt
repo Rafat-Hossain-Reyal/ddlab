@@ -1,0 +1,120 @@
+docker container start -i  myHadoop 
+
+
+DROP DATABASE education_db CASCADE;
+
+
+CREATE DATABASE IF NOT EXISTS education_db;
+
+
+CREATE TABLE IF NOT EXISTS education_db.student_results (
+    student_id INT,
+    subject_code STRING,
+    marks INT,
+    grade STRING
+)
+PARTITIONED BY (
+    exam_year INT,
+    exam_session STRING
+)
+STORED AS PARQUET
+LOCATION '/TeacherDetail2/Result';
+
+
+
+CREATE TABLE IF NOT EXISTS education_db.result_tmp (
+    student_id INT,
+    subject_code STRING,
+    marks INT,
+    grade STRING,
+    exam_year INT,
+    exam_session STRING
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+LOCATION '/TeacherDetail2/Result_tmp';
+
+
+
+hdfs dfs -ls /TeacherDetail2/
+
+
+docker cp "C:\Users\Asus\Downloads\result.csv" myHadoop:/test3
+
+
+LOAD DATA LOCAL INPATH '/test3/result.csv' INTO TABLE education_db.result_tmp;
+
+
+set hive.exec.dynamic.partition=true;
+set hive.exec.dynamic.partition.mode=nonstrict;
+
+
+INSERT OVERWRITE TABLE student_results 
+PARTITION (exam_year, exam_session)
+SELECT student_id, subject_code, marks, grade, exam_year, exam_session
+FROM result_tmp;
+
+
+DROP TABLE education_db.result_tmp;
+
+
+ALTER TABLE education_db.student_results
+DROP PARTITION (exam_year=2024, exam_session='Fall');
+
+
+MSCK REPAIR TABLE education_db.student_results;
+
+
+ALTER TABLE education_db.student_results
+ADD PARTITION (exam_year=2024, exam_session='Summer')
+LOCATION '/TeacherDetail2/Result/exam_year=2024/exam_session=Summer';
+
+
+MSCK REPAIR TABLE education_db.student_results;
+
+SHOW PARTITIONS education_db.student_results;
+
+
+INSERT INTO TABLE education_db.student_results
+PARTITION (exam_year=2024, exam_session='Summer')
+SELECT 101, 'MATH101', 85, 'A'
+UNION ALL
+SELECT 102, 'ENG201', 78, 'B'
+UNION ALL
+SELECT 103, 'CS105', 92, 'A';
+
+
+SELECT *
+FROM education_db.student_results
+WHERE exam_year=2024
+AND exam_session='Summer';
+
+
+
+SELECT *
+FROM education_db.student_results
+WHERE subject_code LIKE 'CSE%';
+
+
+
+SELECT *
+FROM education_db.student_results
+WHERE exam_year = 2024
+  AND exam_session = 'Spring'
+ORDER BY marks DESC
+LIMIT 1;
+
+
+
+
+SELECT 
+    REGEXP_EXTRACT(subject_code, '([A-Z]+)', 1) AS department,
+    AVG(marks) AS avg_marks
+FROM education_db.student_results
+WHERE exam_year = 2024
+GROUP BY REGEXP_EXTRACT(subject_code, '([A-Z]+)', 1)
+ORDER BY avg_marks DESC;
+
+
+
+
